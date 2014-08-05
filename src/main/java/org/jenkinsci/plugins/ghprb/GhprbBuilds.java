@@ -193,32 +193,32 @@ public class GhprbBuilds {
 
 		logger.log(Level.SEVERE, "----------------- finished");
 
-		merge();
+		//merge();
 		// --
 
 	}
 
-	public void merge() {
+	public void merge(GHCommitState state,AbstractBuild currentBuild) {
 		GhprbCause c = getCause(mainBuild);
 		if (c == null)
 			return;
 
-		GHCommitState state;
-		if (mainBuild.getResult() == Result.SUCCESS) {
-			state = GHCommitState.SUCCESS;
-		} else if (mainBuild.getResult() == Result.UNSTABLE) {
-			state = GHCommitState.valueOf(GhprbTrigger.getDscp()
-					.getUnstableAs());
-		} else {
-			state = GHCommitState.FAILURE;
-		}
+//		GHCommitState state;
+//		if (mainBuild.getResult() == Result.SUCCESS) {
+//			state = GHCommitState.SUCCESS;
+//		} else if (mainBuild.getResult() == Result.UNSTABLE) {
+//			state = GHCommitState.valueOf(GhprbTrigger.getDscp()
+//					.getUnstableAs());
+//		} else {
+//			state = GHCommitState.FAILURE;
+//		}
 		if (state == GHCommitState.FAILURE) {
 			repo.addComment(
 					c.getPullID(),
 					"Build failed. Pull ID: " + c.getPullID() + "\nGithub : "
 							+ mainBuild.getDescription() + "\nJenkins: "
 							+ Jenkins.getInstance().getRootUrl()
-							+ mainBuild.getUrl());
+							+ mainBuild.getUrl()+"\nFaild Jenkins build:"+ Jenkins.getInstance().getRootUrl()+currentBuild.getUrl());
 		}
 
 		repo.createCommitStatus(mainBuild, state,

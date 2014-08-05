@@ -9,6 +9,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import org.jenkinsci.plugins.ghprb.AutoMergeProcessor.DownstreamBuilds;
+import org.kohsuke.github.GHCommitState;
 
 import hudson.Extension;
 import hudson.Launcher;
@@ -39,14 +40,7 @@ public class GhprbBuildListener extends RunListener<AbstractBuild> {
 	@Override
 	public void onStarted(AbstractBuild build, TaskListener listener) {
 		// check build fail or not
-		if (failedMainBuild != null && findCause(build, failedMainBuild)) {
-			LOG.log(Level.INFO, "@@@@@@@@@@@@@@@@@ Have to cancel the build");
-			Executor e = build.getExecutor();
-			if (e != null) {
-				e.interrupt(Result.ABORTED);
-			}
-			return;
-		}
+
 		GhprbTrigger trigger = GhprbTrigger.getTrigger(build.getProject());
 		if (trigger == null)
 			return;
@@ -56,143 +50,173 @@ public class GhprbBuildListener extends RunListener<AbstractBuild> {
 
 	@Override
 	public void onCompleted(AbstractBuild build, TaskListener listener) {
-		LOG.log(Level.INFO, "@@@@@@@@@@@@@@@@@ GhprbBuildListener complete");
+		if (build instanceof AbstractBuild) {
+			LOG.log(Level.INFO, "@@@@@@@@@@@@@@@@@ GhprbBuildListener complete");
 
-		
-		
+			Set<GhprbTrigger> triggerListKeySet = triggerList.keySet();
+			LOG.log(Level.INFO, "@@@@@@@@@@@@@@@@@ trigger list size :"
+					+ triggerList.size());
+			trigger_forloop: for (GhprbTrigger t : triggerListKeySet) {
 
-		// check build fail or not
-		if (failedMainBuild != null && findCause(build, failedMainBuild)) {
-			LOG.log(Level.INFO, "@@@@@@@@@@@@@@@@@ Have to cancel the build");
-			return;
-		}
-
-		Set<GhprbTrigger> triggerListKeySet = triggerList.keySet();
-		LOG.log(Level.INFO, "@@@@@@@@@@@@@@@@@ trigger list size :"
-				+ triggerList.size());
-		trigger_forloop: for (GhprbTrigger t : triggerListKeySet) {
-
-			List<DownstreamBuilds> downstreamList = t.getGhprb().getBuilds()
-					.getDownstreamBuilds();
-			LOG.log(Level.INFO,
-					"@@@@@@@@@@@@@@@@@ downstream build list size :"
-							+ downstreamList.size());
-			for (DownstreamBuilds db : downstreamList) {
+			
+			try{
+				List<DownstreamBuilds> downstreamList = t.getGhprb()
+						.getBuilds().getDownstreamBuilds();
 				LOG.log(Level.INFO,
-						"@@@@@@@@@@@@@@@@@ downstream build name  :"
-								+ db.getProjectName());
-				LOG.log(Level.INFO,
-						"@@@@@@@@@@@@@@@@@ downstream build main project name  :"
-								+ t.getGhprb().getBuilds().getMainBuild()
-										.getProject().getName());
-				if (db.getProjectName() == build.getProject().getName()) {
-					AbstractBuild mainBuild = t.getGhprb().getBuilds()
-							.getMainBuild();
-
-					// check whether it is
-					boolean returnStatus = findCause(build, mainBuild);
+						"@@@@@@@@@@@@@@@@@ downstream build list size :"
+								+ downstreamList.size());
+				for (DownstreamBuilds db : downstreamList) {
 					LOG.log(Level.INFO,
-							"################ Cause returns status :"
-									+ returnStatus);
-					if (returnStatus) {
-						// ----
-						if (t.getGhprb().getBuilds().getBuildDetails() == null) {
-							t.getGhprb()
-									.getBuilds()
-									.setBuildDetails(
-											new ConcurrentHashMap<String, AbstractBuild>());
-						}
+							"@@@@@@@@@@@@@@@@@ downstream build name  :"
+									+ db.getProjectName());
+					LOG.log(Level.INFO,
+							"@@@@@@@@@@@@@@@@@ downstream build main project name  :"
+									+ t.getGhprb().getBuilds().getMainBuild()
+											.getProject().getName());
+					if (db.getProjectName() == build.getProject().getName()) {
+						AbstractBuild mainBuild = t.getGhprb().getBuilds()
+								.getMainBuild();
 
-						LOG.log(Level.SEVERE,
-								"@@@@@@@@@   Add Build details -> Project name :"
-										+ build.getProject().getName()
-										+ " build no :" + build.getNumber());
-
-					
-						if (build.getResult() == Result.FAILURE) {
-							failedMainBuild = mainBuild;
-							LOG.log(Level.INFO,
-									"------------ build faild !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-							t.getGhprb().getBuilds().setBuildDetails(null);
-
-						} else if (build.getResult() == Result.UNSTABLE) {
-							LOG.log(Level.INFO, "------------ unstable");
-							t.getGhprb().getBuilds().setBuildDetails(null);
-						} else {
-							t.getGhprb().getBuilds().getBuildDetails()
-									.put(build.getProject().getName(), build);
-							LOG.log(Level.INFO, "------------ GHPRBBUILDS else");
-							if (t.getGhprb().getBuilds().getBuildDetails()
-									.size() == t.getGhprb().getBuilds()
-									.getDownstreamBuilds().size()) {
-								// competed and merge
-								LOG.log(Level.INFO,
-										"------------ All completed and successed");
-								t.getGhprb().getBuilds().merge();
-								t.getGhprb().getBuilds().setBuildDetails(null);
+						// check whether it is
+						boolean returnStatus = findCause(build, mainBuild);
+						LOG.log(Level.INFO,
+								"################ Cause returns status :"
+										+ returnStatus);
+						if (returnStatus) {
+							// ----
+							if (t.getGhprb().getBuilds().getBuildDetails() == null) {
+								t.getGhprb()
+										.getBuilds()
+										.setBuildDetails(
+												new ConcurrentHashMap<String, AbstractBuild>());
 							}
 
+							LOG.log(Level.SEVERE,
+									"@@@@@@@@@   Add Build details -> Project name :"
+											+ build.getProject().getName()
+											+ " build no :" + build.getNumber());
+
+							if (build.getResult() == Result.FAILURE) {
+								failedMainBuild = mainBuild;
+								LOG.log(Level.INFO,
+										"------------ build faild !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+								t.getGhprb().getBuilds()
+										.merge(GHCommitState.FAILURE, build);
+								t.getGhprb().getBuilds().setBuildDetails(null);
+
+							} else if (build.getResult() == Result.UNSTABLE) {
+								LOG.log(Level.INFO, "------------ unstable");
+								t.getGhprb()
+										.getBuilds()
+										.merge(GHCommitState.valueOf(GhprbTrigger
+												.getDscp().getUnstableAs()),
+												build);
+								t.getGhprb().getBuilds().setBuildDetails(null);
+							} else {
+								t.getGhprb()
+										.getBuilds()
+										.getBuildDetails()
+										.put(build.getProject().getName(),
+												build);
+								LOG.log(Level.INFO,
+										"------------ GHPRBBUILDS else");
+								if (t.getGhprb().getBuilds().getBuildDetails()
+										.size() == t.getGhprb().getBuilds()
+										.getDownstreamBuilds().size()) {
+									// competed and merge
+									LOG.log(Level.INFO,
+											"------------ All completed and successed");
+									t.getGhprb()
+											.getBuilds()
+											.merge(GHCommitState.SUCCESS, build);
+									t.getGhprb().getBuilds()
+											.setBuildDetails(null);
+								}
+
+							}
+
+							// ----
+
+							break trigger_forloop;
+
 						}
 
-						// ----
-
-						break trigger_forloop;
-
 					}
-
 				}
+			}catch(NullPointerException e){
+				triggerList.remove(t);
 			}
 
-		}
-
-		GhprbTrigger trigger = GhprbTrigger.getTrigger(build.getProject());// original
-
-		if (trigger != null) {
-			LOG.log(Level.INFO, "@@@@@@@@@@@@@@@@@ trigger if");
-			trigger.getGhprb().getBuilds().setMainBuild(build);
-			// set the downstream builds for the PR triggered project
-			if (trigger.getGhprb().getBuilds().getDownstreamBuilds() == null) {
-				trigger.getGhprb()
-						.getBuilds()
-						.setDownstreamBuilds(
-								new AutoMergeProcessor()
-										.getDownstreamBuildList(build));
 			}
 
-			if (!triggerList.containsKey(trigger)) {
-				LOG.log(Level.INFO, "@@@@@@@@@@@@@@@@@ trigger if containskey");
-				triggerList.put(trigger, trigger.getGhprb().getBuilds());
-			}
-			if (trigger.getGhprb().getBuilds().getDownstreamBuilds().size() == 0) {
+			GhprbTrigger trigger = GhprbTrigger.getTrigger(build.getProject());// original
+
+			if (trigger != null) {
+				LOG.log(Level.INFO, "@@@@@@@@@@@@@@@@@ trigger if");
+				trigger.getGhprb().getBuilds().setMainBuild(build);
+				// set the downstream builds for the PR triggered project
+				if (trigger.getGhprb().getBuilds().getDownstreamBuilds() == null) {
+					trigger.getGhprb()
+							.getBuilds()
+							.setDownstreamBuilds(
+									new AutoMergeProcessor()
+											.getDownstreamBuildList(build));
+				}
+
+				if (!triggerList.containsKey(trigger)) {
+					LOG.log(Level.INFO,
+							"@@@@@@@@@@@@@@@@@ trigger if containskey");
+					triggerList.put(trigger, trigger.getGhprb().getBuilds());
+				}
+
 				boolean isCaused = findCause(build, trigger.getGhprb()
 						.getBuilds().getMainBuild());
 				if (isCaused) {
-					trigger.getGhprb().getBuilds().merge();
-					LOG.log(Level.INFO,
-							"@@@@@@@@@@@@@@@@@ No children in this "
-									+ trigger.getGhprb().getBuilds()
-											.getMainBuild() + " main project");
+					if (build.getResult() == Result.FAILURE) {
+						
+						LOG.log(Level.INFO,
+								"------------ build faild !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+
+						trigger.getGhprb().getBuilds()
+								.merge(GHCommitState.FAILURE, build);
+						trigger.getGhprb().getBuilds().setBuildDetails(null);
+
+					} else if (build.getResult() == Result.UNSTABLE) {
+						LOG.log(Level.INFO, "------------ unstable");
+						trigger.getGhprb()
+								.getBuilds()
+								.merge(GHCommitState.valueOf(GhprbTrigger
+										.getDscp().getUnstableAs()), build);
+						trigger.getGhprb().getBuilds().setBuildDetails(null);
+					} else {
+						if (trigger.getGhprb().getBuilds()
+								.getDownstreamBuilds().size() == 0) {
+							LOG.log(Level.INFO, "------------ GHPRBBUILDS else");
+
+							// competed and merge
+							LOG.log(Level.INFO,
+									"------------ All completed and successed");
+							trigger.getGhprb().getBuilds()
+									.merge(GHCommitState.SUCCESS, build);
+							trigger.getGhprb().getBuilds()
+									.setBuildDetails(null);
+
+							LOG.log(Level.INFO,
+									"@@@@@@@@@@@@@@@@@ No children in this "
+											+ trigger.getGhprb().getBuilds()
+													.getMainBuild()
+											+ " main project");
+						}
+					}
+
 				}
 
 			}
-
+		} else {
+			LOG.log(Level.INFO, "@@@@@@@@@@@@@@@@@ not a abstract build");
 		}
 	}
 
-	// private boolean findCause(AbstractBuild<?, ?>
-	// currentBuild,AbstractBuild<?, ?> mainBuild) {
-	// // for (Cause c : currentBuild.getCauses()) {
-	// // if (c instanceof UpstreamCause) {
-	// // UpstreamCause upcause = (UpstreamCause) c;
-	// // String upProjectName = upcause.getUpstreamProject();
-	// // int buildNumber = upcause.getUpstreamBuild();
-	// // LOG.log(Level.INFO, "################ Cause Project name :"
-	// // + upProjectName + " Build no :" + buildNumber);
-	// // }
-	// // }
-	//
-	// return true;
-	// }
 
 	private boolean findCause(AbstractBuild<?, ?> currentBuild,
 			AbstractBuild<?, ?> mainBuild) {

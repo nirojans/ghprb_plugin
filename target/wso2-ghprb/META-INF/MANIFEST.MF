@@ -1,0 +1,19 @@
+Manifest-Version: 1.0
+Built-By: niro273
+Created-By: Apache Maven
+Build-Jdk: 1.7.0_55
+Extension-Name: wso2-ghprb
+Implementation-Title: wso2-ghprb
+Implementation-Version: 1.20-SNAPSHOT
+Group-Id: org.jenkins-ci.plugins
+Short-Name: wso2-ghprb
+Long-Name: WSO2 GitHub Pull Request Builder
+Url: https://wiki.jenkins-ci.org/display/JENKINS/GitHub+pull+request+b
+ uilder+plugin
+Plugin-Version: 1.20-SNAPSHOT (private-08/05/2014 11:04-niro273)
+Hudson-Version: 1.538
+Jenkins-Version: 1.538
+Plugin-Dependencies: github:1.5
+Plugin-Developers: Honza Brázdil:janinko:jbrazdil@redhat.com,Valdis R
+ igdon:valdisrigdon:
+
